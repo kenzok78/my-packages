@@ -9,11 +9,13 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=my-autocore
 PKG_VERSION:=1
-PKG_RELEASE:=29
+PKG_RELEASE:=2
 
 include $(INCLUDE_DIR)/package.mk
 
 define Package/my-autocore-arm
+  SECTION:=libs
+  CATEGORY:=Libraries
   TITLE:=ARM auto core script.
   MAINTAINER:=CN_SZTL
   DEPENDS:=@(arm||aarch64) \
@@ -24,6 +26,8 @@ define Package/my-autocore-arm
 endef
 
 define Package/my-autocore-x86
+  SECTION:=libs
+  CATEGORY:=Libraries
   TITLE:=x86/x64 auto core loadbalance script.
   MAINTAINER:=Lean / CN_SZTL
   DEPENDS:=@TARGET_x86 +bc +lm-sensors +ethtool
@@ -54,6 +58,8 @@ define Package/my-autocore-arm/install
 	$(INSTALL_BIN) ./files/common/ethinfo $(1)/sbin/ethinfo
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/status/include
 	$(INSTALL_DATA) ./files/common/29_eth.js $(1)/www/luci-static/resources/view/status/include/
+	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/view/admin_status/index
+	$(INSTALL_DATA) ./files/common/disc_status.htm $(1)/usr/lib/lua/luci/view/admin_status/index/
 endef
 
 define Package/my-autocore-x86/install
@@ -66,6 +72,8 @@ define Package/my-autocore-x86/install
 	$(INSTALL_DATA) ./files/common/29_eth.js $(1)/www/luci-static/resources/view/status/include/
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/view/admin_status/index/
 	$(INSTALL_DATA) ./files/x86/nvme_status.htm $(1)/usr/lib/lua/luci/view/admin_status/index/
+	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/view/admin_status/index
+	$(INSTALL_DATA) ./files/common/disc_status.htm $(1)/usr/lib/lua/luci/view/admin_status/index/
 endef
 
 $(eval $(call Download,armcpuinfo))

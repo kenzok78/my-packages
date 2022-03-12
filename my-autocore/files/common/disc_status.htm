@@ -1,7 +1,7 @@
 <% local raid = {}
    local devs = {}
    local devinfo = {}
-   local colors = { "c0c0ff", "fbbd00", "e97c30", "a0e0a0", "b2c005", "e0c0ff"  }
+   local colors = { "c0c0ff", "fbbd00", "e97c30", "a0e0a0", "e0c0ff" }
    local mounts = nixio.fs.readfile("/proc/mounts")
    
    local show_raid = 1
@@ -139,11 +139,11 @@
    end
 
    if show_disc == 1 then
-   for dev in nixio.fs.glob("/sys/class/nvme/*/device/nvme/*") do
+   for dev in nixio.fs.glob("/sys/class/scsi_disk/*/device") do
 	local section
 	local model = nixio.fs.readfile(dev .. "/model")
-	local fw = nixio.fs.readfile(dev .. "/firmware_rev")
-	for bdev in nixio.fs.glob(dev .. "/nvme*") do
+	local fw = nixio.fs.readfile(dev .. "/rev")
+	for bdev in nixio.fs.glob(dev .. "/block/*") do
 		local section
 		local name = nixio.fs.basename(bdev)
 		local size = tonumber(nixio.fs.readfile(bdev .. "/size"))
@@ -153,7 +153,7 @@
 		local serial = "-"
 		local secsize = "-"
 
-		for _,line in ipairs(luci.util.execl("smartctl -A -i -d nvme -n standby -f brief /dev/" .. name)) do
+		for _,line in ipairs(luci.util.execl("smartctl -A -i -n standby -f brief /dev/" .. name)) do
 			local attrib, val
 			if section == 1 then
 				attrib, val = line:match "^(.*):%s*(.*)"
@@ -177,28 +177,38 @@
                                         if section ~= 2 then section = 0 end
                                 elseif (attrib == "Power mode is") or (attrib == "Power mode was") then
                                         status = val:lower():match "(%S*)"
+                                elseif attrib == "Sector Sizes" then
+                                        secsize = val:match "([0-9]*) bytes physical"
+                                elseif attrib == "Sector Size" then
+                                        secsize = val:match "([0-9]*)"
                                 elseif attrib == "Serial Number" then
                                         serial = val
                                 elseif attrib == "194" then
                                         temp = val .. "&deg;C"
                                 end
 		end
-		table.insert(devinfo, {name=name, model=model, fw=fw, size=size, serial=serial, parts=get_parts(name,status,size) })
+		table.insert(devinfo, {name=name, model=model, fw=fw, size=size, status=status, temp=temp, serial=serial, secsize=secsize, parts=get_parts(name,status,size) })
 	end
+   end
+
+   for r,dev in ipairs(raid) do
+	table.insert(devinfo, {name=dev.name, model="Linux RAID", size=dev.size, status=get_status(dev), secsize=secsize, parts=get_parts(dev.name,status,dev.size) })
    end
    end
 
-   if show_raid == 1 and #devinfo > 0 then %>
+   if show_disc == 1 then %>
 <div class="cbi-section">
-	<h3><%:NVMe SSD%></h3>
+	<h3><%:Disks%></h3>
         <table class="cbi-section-table" style="white-space: nowrap">
                 <tr>
                         <th width="5%">&nbsp;</th>
                         <th width="30%"><%:Model%></th>
-                        <th width="25%"><%:Serial number%></th>
-                        <th width="20%"><%:Firmware%></th>
-                        <th width="20%"><%:Capacity%></th>
-                       <!-- <th width="10%"><%:Temperature%></th>-->
+                        <th width="15%"><%:Serial number%></th>
+                        <th width="10%"><%:Firmware%></th>
+                        <th width="10%"><%:Capacity%></th>
+                        <th width="5%"><%:Sector size%></th>
+                        <th width="5%"><%:Temperature%></th>
+                        <th width="20%"><%:Power state%></th>
                 </tr>
 <%	local style=true
 	for d,dev in ipairs(devinfo) do %>
@@ -208,11 +218,13 @@
                         <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.serial%></td>
                         <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.fw%></td>
                         <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=disp_size(dev.size)%></td>
-                        <!-- <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.temp%></td>-->
+                        <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.secsize%></td>
+                        <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.temp%></td>
+                        <td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.status%></td>
                 </tr>
 		<tr style="height:0px" />
                 <tr class="cbi-section-table-row cbi-rowstyle-<%=(style and 1 or 2)%>">
-                        <td style="padding:0px; border-top-width:0px" colspan="7" rowspan="2">
+                        <td style="padding:0px; border-top-width:0px;" colspan="7" rowspan="2">
                         <table style="border: 0pt; border-collapse:collapse; width:100%; padding:0px; margin:0px"><tr>
                         <% for _,part in pairs(dev.parts) do %>
                                 <td style="text-align:center; padding: 0px 4px; border-radius: 3px; background-color:#<%=part.color%>" width="<%=part.perc%>%"><%=part.name%> <%=disp_size(part.size)%> <%=part.fs%></td>
@@ -222,6 +234,44 @@
                 </tr>
                 <tr style="height:0px" />
 <%              style = not style
+	end %>
+	</table>
+</div>
+<% end
+   if show_raid == 1 and #raid > 0 then %>
+<div class="cbi-section">
+	<h3><%:Raid arrays%></h3>
+	<table class="cbi-section-table" style="white-space:nowrap">
+		<tr>
+			<th width="5%">&nbsp;</th>
+			<th width="13%"><%:Level%></th>
+			<th width="13%"><%:# Disks%></th>
+			<th width="13%"><%:Capacity%></th>
+			<th width="13%"><%:Metadata%></th>
+			<th width="43%"><%:Status%></th>
+		</tr>
+<%	local style=true
+	for r,dev in ipairs(raid) do %> 
+		<tr class="cbi-section-table-row cbi-rowstyle-<%=(style and 1 or 2)%>">
+			<td class="cbi-vluae-field" style="padding-bottom:0px; border-bottom-width:0px; vertical-align:middle" rowspan="4"><%=dev.name%></td>
+			<td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.rlevel%></td>
+			<td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.ndisks%></td>
+			<td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=disp_size(dev.size)%></td>
+			<td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.metav%></td>
+			<td class="cbi-value-field" style="padding-bottom:0px; border-bottom-width:0px" rowspan="2"><%=dev.status%></td>
+		</tr>
+		<tr style="height:0px" />
+		<tr class="cbi-section-table-row cbi-rowstyle-<%=(style and 1 or 2)%>">
+			<td style="padding-top:0px; border-top-width:0px" colspan="6" rowspan="2">
+				<table style="border: 0pt; border-collapse:collapse; width:100%; padding:0px; margin:0px"><tr>
+					<% for _,member in pairs(dev.members) do %>
+					<td style="text-align:center; padding: 0px 4px; border-radius: 3px; background-color:#<%=member.color%>; white-space: nowrap"><%=member.name%> <%=member.size%> (<%=member.state%>)</td>
+					<% end %>
+				</tr></table>
+			</td>
+		</tr>
+		<tr style="height:0px" />
+<%		style = not style
 	end %>
 	</table>
 </div>

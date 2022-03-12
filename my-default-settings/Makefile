@@ -6,10 +6,11 @@
 #
 
 include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=my-default-settings
 PKG_VERSION:=1
-PKG_RELEASE:=10
+PKG_RELEASE:=2
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -17,27 +18,32 @@ define Package/$(PKG_NAME)
   SECTION:=luci
   CATEGORY:=LuCI
   TITLE:=Default Settings
-  MAINTAINER:=Kiddin'
+  MAINTAINER:=kenzo'
   PKGARCH:=all
   DEPENDS:=+luci-base +bash
 endef
 
 define Package/$(PKG_NAME)/conffiles
-/etc/config/base_config
+/etc/config/
+/etc/nginx/
+endef
+
+define Build/Prepare
+	chmod -R +x ./files/bin ./files/sbin ./files/etc/profile.d ./files/etc/rc.d ./files/usr/share target/*/{*,}/files/{etc/init.d,usr/bin} >/dev/null || true
 endef
 
 define Build/Compile
 endef
 
 define Package/$(PKG_NAME)/install
-	$(INSTALL_DIR) $(1)/etc/uci-defaults
-	$(INSTALL_DATA) ./files/uci.defaults $(1)/etc/uci-defaults/95-default-settings
-	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_DATA) ./files/base_config.conf $(1)/etc/config/base_config
-	$(INSTALL_DIR) $(1)/etc/profile.d
-	$(INSTALL_BIN) ./files/sysinfo.sh $(1)/etc/profile.d/sysinfo.sh
-	$(INSTALL_DIR) $(1)/sbin
-	$(INSTALL_BIN) ./files/shutdown $(1)/sbin/shutdown
+	$(CP) ./files/* $(1)/
+	echo $(BOARD)$(TARGETID)
+	if [ -d ./target/$(BOARD)/files/. ]; then \
+		$(CP) ./target/$(BOARD)/files/* $(1)/; \
+	fi
+	if [ -d ./target/$(TARGETID)/files/. ]; then \
+		$(CP) ./target/$(TARGETID)/files/* $(1)/; \
+	fi; \
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
 	po2lmo ./po/zh_Hans/default.po $(1)/usr/lib/lua/luci/i18n/default.zh-cn.lmo
 
